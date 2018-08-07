@@ -88,6 +88,8 @@ def create_batches_of_sentence_ids(sentences, batch_equal_size, max_batch_size):
     """
     batches_of_sentence_ids = []
     if batch_equal_size == True:
+        # create an ordered dict of
+        #   key : value = sentence length : [sentence1's id, sentence2's id, ...]
         sentence_ids_by_length = collections.OrderedDict()
         sentence_length_sum = 0.0
         for i in range(len(sentences)):
@@ -96,6 +98,17 @@ def create_batches_of_sentence_ids(sentences, batch_equal_size, max_batch_size):
                 sentence_ids_by_length[length] = []
             sentence_ids_by_length[length].append(i)
 
+        '''
+        Create a list of sentence batches of the form
+          [ [id1, id2, ...],
+            [id?, id?, ...],
+            ...
+            [id?, id?, ...] ]
+        where
+          - each batch contains sentences of the SAME LENGTH
+          - the id order determined by the order they were added to 'sentence_ids_by_length'
+          - the length of each batch is determined by 'batch_size'
+        '''
         for sentence_length in sentence_ids_by_length:
             if max_batch_size > 0:
                 batch_size = max_batch_size
@@ -105,6 +118,11 @@ def create_batches_of_sentence_ids(sentences, batch_equal_size, max_batch_size):
             for i in range(0, len(sentence_ids_by_length[sentence_length]), batch_size):
                 batches_of_sentence_ids.append(sentence_ids_by_length[sentence_length][i:i + batch_size])
     else:
+
+        '''
+        This is basically the same as previous, except that each sentence in each batch
+        may NOT be of the same length
+        '''
         current_batch = []
         max_sentence_length = 0
         for i in range(len(sentences)):
@@ -202,7 +220,7 @@ def run_experiment(config_path):
                     sys.stderr.write("ERROR: Cost is NaN or Inf. Exiting.\n")
                     break
 
-                if (epoch == 0 or (model_selector_type == "high" and results_dev[model_selector] > best_selector_value) 
+                if (epoch == 0 or (model_selector_type == "high" and results_dev[model_selector] > best_selector_value)
                                or (model_selector_type == "low" and results_dev[model_selector] < best_selector_value)):
                     best_epoch = epoch
                     best_selector_value = results_dev[model_selector]
@@ -240,4 +258,3 @@ def run_experiment(config_path):
 
 if __name__ == "__main__":
     run_experiment(sys.argv[1])
-
