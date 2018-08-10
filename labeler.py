@@ -101,6 +101,8 @@ class SequenceLabeler(object):
 
 
     def construct_network(self):
+
+        # These will be populated with tensorflow API 'feed_dict'
         self.word_ids = tf.placeholder(tf.int32, [None, None], name="word_ids")
         self.char_ids = tf.placeholder(tf.int32, [None, None, None], name="char_ids")
         self.sentence_lengths = tf.placeholder(tf.int32, [None], name="sentence_lengths")
@@ -108,6 +110,7 @@ class SequenceLabeler(object):
         self.label_ids = tf.placeholder(tf.int32, [None, None], name="label_ids")
         self.learningrate = tf.placeholder(tf.float32, name="learningrate")
         self.is_training = tf.placeholder(tf.int32, name="is_training")
+        print('self.word_ids: {}'.format(self.word_ids))
 
         self.loss = 0.0
         input_tensor = None
@@ -146,6 +149,7 @@ class SequenceLabeler(object):
         # tf.nn.embedding_lookup does slicing similar to numpy matrix slicing
         # (https://stackoverflow.com/questions/34870614/what-does-tf-nn-embedding-lookup-function-do)
         input_tensor = tf.nn.embedding_lookup(self.word_embeddings, self.word_ids)
+        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ', summarize = 10)
         print('input_tensor: {}'.format(input_tensor))
 
         # 'word_embedding_size' = 300
@@ -167,11 +171,13 @@ class SequenceLabeler(object):
 
                 # Similar to word input_tensor
                 char_input_tensor = tf.nn.embedding_lookup(self.char_embeddings, self.char_ids)
+                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 10)
                 print('char_input_tensor: {}'.format(char_input_tensor))
 
                 s = tf.shape(char_input_tensor)
                 char_input_tensor = tf.reshape(char_input_tensor, shape=[s[0]*s[1], s[2], self.config["char_embedding_size"]])
                 _word_lengths = tf.reshape(self.word_lengths, shape=[s[0]*s[1]])
+                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 10)
                 print('char_input_tensor: {}'.format(char_input_tensor))
 
                 char_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["char_recurrent_size"],
@@ -190,12 +196,15 @@ class SequenceLabeler(object):
                 # Seems like only char_output_fw and char_output_bw are important
                 _, ((_, char_output_fw), (_, char_output_bw)) = char_lstm_outputs
                 char_output_tensor = tf.concat([char_output_fw, char_output_bw], axis=-1)
+                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                 char_output_tensor = tf.reshape(char_output_tensor, shape=[s[0], s[1], 2 * self.config["char_recurrent_size"]])
+                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                 char_output_vector_size = 2 * self.config["char_recurrent_size"]
+                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                 if self.config["lmcost_char_gamma"] > 0.0:
@@ -213,6 +222,7 @@ class SequenceLabeler(object):
                     # input = char_output_tensor
                     # output dim = char_hidden_layer_size
                     char_output_tensor = tf.layers.dense(char_output_tensor, char_hidden_layer_size, activation=tf.tanh, kernel_initializer=self.initializer)
+                    char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                     print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                     char_output_vector_size = char_hidden_layer_size
@@ -221,7 +231,7 @@ class SequenceLabeler(object):
 
                     # combines character and word embeddings by concatenation
                     input_tensor = tf.concat([input_tensor, char_output_tensor], axis=-1)
-
+                    input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ')
                     print('input_tensor: {}'.format(input_tensor))
 
                     input_vector_size += char_output_vector_size
@@ -248,6 +258,7 @@ class SequenceLabeler(object):
 
         dropout_input = self.config["dropout_input"] * tf.cast(self.is_training, tf.float32) + (1.0 - tf.cast(self.is_training, tf.float32))
         input_tensor =  tf.nn.dropout(input_tensor, dropout_input, name="dropout_word")
+        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ')
         print('input_tensor: {}'.format(input_tensor))
 
         word_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["word_recurrent_size"],
