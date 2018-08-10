@@ -2,6 +2,7 @@ import collections
 import tensorflow as tf
 import re
 import numpy
+
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import math_ops
 
@@ -38,6 +39,7 @@ class SequenceLabeler(object):
                 char_counter.update(word[0])
 
         # Create character to index dictionary, ordered from most common to least common
+        # Contains key:value = char:count pairs as well, but ordered
         self.char2id = collections.OrderedDict([(self.CUNK, 0)])
         for char, count in char_counter.most_common():
             if char not in self.char2id:
@@ -55,6 +57,7 @@ class SequenceLabeler(object):
                 word_counter[w] += 1
 
         # Create word to index dictionary, ordered from most common to least common
+        # Contains key:value = word:count pairs as well, but ordered
         self.word2id = collections.OrderedDict([(self.UNK, 0)])
         for word, count in word_counter.most_common():
             if self.config["min_word_freq"] <= 0 or count >= self.config["min_word_freq"]:
@@ -120,19 +123,30 @@ class SequenceLabeler(object):
         else:
             raise ValueError("Unknown initializer")
 
-        # Create a word embedding tf variable:
-        #   shape = [#unique words, #dim of word embedding] = [?, 300]
-        #   initializer = self.initializr = tf.glorot_normal_initializer()
-        #   trainable = True
+        # ---------------------
+        # End of initialization
+        # ---------------------
+
+        '''
+        This is the word embedding preloaded from GloVe, set at size 300, which can be fine-tuned
+        during training, by setting trainable = True in the tensorflow API
+
+          shape = [#unique words, #dim of word embedding] = [?, 300]
+          initializer = self.initializr = tf.glorot_normal_initializer()
+          trainable = True
+
+        '''
         self.word_embeddings = tf.get_variable("word_embeddings",
             shape=[len(self.word2id), self.config["word_embedding_size"]],
             initializer=(tf.zeros_initializer() if self.config["emb_initial_zero"] == True else self.initializer),
             trainable=(True if self.config["train_embeddings"] == True else False))
+        print('self.word_embeddings: {}'.format(self.word_embeddings))
 
         # This provides a way to lookup the word embeddings based on an input list of word indices
         # tf.nn.embedding_lookup does slicing similar to numpy matrix slicing
         # (https://stackoverflow.com/questions/34870614/what-does-tf-nn-embedding-lookup-function-do)
         input_tensor = tf.nn.embedding_lookup(self.word_embeddings, self.word_ids)
+        print('input_tensor: {}'.format(input_tensor))
 
         # 'word_embedding_size' = 300
         input_vector_size = self.config["word_embedding_size"]
@@ -153,10 +167,12 @@ class SequenceLabeler(object):
 
                 # Similar to word input_tensor
                 char_input_tensor = tf.nn.embedding_lookup(self.char_embeddings, self.char_ids)
+                print('char_input_tensor: {}'.format(char_input_tensor))
 
                 s = tf.shape(char_input_tensor)
                 char_input_tensor = tf.reshape(char_input_tensor, shape=[s[0]*s[1], s[2], self.config["char_embedding_size"]])
                 _word_lengths = tf.reshape(self.word_lengths, shape=[s[0]*s[1]])
+                print('char_input_tensor: {}'.format(char_input_tensor))
 
                 char_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["char_recurrent_size"],
                     use_peepholes=self.config["lstm_use_peepholes"],
@@ -170,10 +186,17 @@ class SequenceLabeler(object):
                     reuse=False)
 
                 char_lstm_outputs = tf.nn.bidirectional_dynamic_rnn(char_lstm_cell_fw, char_lstm_cell_bw, char_input_tensor, sequence_length=_word_lengths, dtype=tf.float32, time_major=False)
+
+                # Seems like only char_output_fw and char_output_bw are important
                 _, ((_, char_output_fw), (_, char_output_bw)) = char_lstm_outputs
                 char_output_tensor = tf.concat([char_output_fw, char_output_bw], axis=-1)
+                print('char_ouput_tensor: {}'.format(char_output_tensor))
+
                 char_output_tensor = tf.reshape(char_output_tensor, shape=[s[0], s[1], 2 * self.config["char_recurrent_size"]])
+                print('char_ouput_tensor: {}'.format(char_output_tensor))
+
                 char_output_vector_size = 2 * self.config["char_recurrent_size"]
+                print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                 if self.config["lmcost_char_gamma"] > 0.0:
                     self.loss += self.config["lmcost_char_gamma"] * self.construct_lmcost(char_output_tensor, char_output_tensor, self.sentence_lengths, self.word_ids, "separate", "lmcost_char_separate")
@@ -190,11 +213,17 @@ class SequenceLabeler(object):
                     # input = char_output_tensor
                     # output dim = char_hidden_layer_size
                     char_output_tensor = tf.layers.dense(char_output_tensor, char_hidden_layer_size, activation=tf.tanh, kernel_initializer=self.initializer)
+                    print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                     char_output_vector_size = char_hidden_layer_size
 
                 if self.config["char_integration_method"] == "concat":
+
+                    # combines character and word embeddings by concatenation
                     input_tensor = tf.concat([input_tensor, char_output_tensor], axis=-1)
+
+                    print('input_tensor: {}'.format(input_tensor))
+
                     input_vector_size += char_output_vector_size
 
                 elif self.config["char_integration_method"] == "attention":
@@ -219,6 +248,7 @@ class SequenceLabeler(object):
 
         dropout_input = self.config["dropout_input"] * tf.cast(self.is_training, tf.float32) + (1.0 - tf.cast(self.is_training, tf.float32))
         input_tensor =  tf.nn.dropout(input_tensor, dropout_input, name="dropout_word")
+        print('input_tensor: {}'.format(input_tensor))
 
         word_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["word_recurrent_size"],
             use_peepholes=self.config["lstm_use_peepholes"],
@@ -356,7 +386,9 @@ class SequenceLabeler(object):
             raise ValueError("Unable to handle value, no UNK token: " + str(token))
         return token_id
 
-
+    '''
+    batch = [sen1, sen2, ...] = list of sentence strings
+    '''
     def create_input_dictionary_for_batch(self, batch, is_training, learningrate):
 
         sentence_lengths = numpy.array([len(sentence) for sentence in batch])

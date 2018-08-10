@@ -149,6 +149,13 @@ def process_sentences(data, labeler, is_training, learningrate, config, name):
     if is_training == True:
         random.shuffle(batches_of_sentence_ids)
 
+    '''
+    batches_of_sentence_ids:
+    [ [id1, id2, ...],
+      [id?, id?, ...],
+      ...
+      [id?, id?, ...] ]
+    '''
     for sentence_ids_in_batch in batches_of_sentence_ids:
         batch = [data[i] for i in sentence_ids_in_batch]
         cost, predicted_labels, predicted_probs = labeler.process_batch(batch, is_training, learningrate)
