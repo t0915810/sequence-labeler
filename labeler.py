@@ -149,8 +149,8 @@ class SequenceLabeler(object):
         # tf.nn.embedding_lookup does slicing similar to numpy matrix slicing
         # (https://stackoverflow.com/questions/34870614/what-does-tf-nn-embedding-lookup-function-do)
         input_tensor = tf.nn.embedding_lookup(self.word_embeddings, self.word_ids)
-        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ', summarize = 10)
         print('input_tensor: {}'.format(input_tensor))
+        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ', summarize = 5)
 
         # 'word_embedding_size' = 300
         input_vector_size = self.config["word_embedding_size"]
@@ -171,14 +171,17 @@ class SequenceLabeler(object):
 
                 # Similar to word input_tensor
                 char_input_tensor = tf.nn.embedding_lookup(self.char_embeddings, self.char_ids)
-                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 10)
                 print('char_input_tensor: {}'.format(char_input_tensor))
+                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 5)
 
+                # Reshape char_input_tensor from 4D [batch size, max # words, max # chars, # unique chars]
+                # into 3D [batch size * max # words, max # chars, # unique chars]
+                # Values are not affected.
                 s = tf.shape(char_input_tensor)
                 char_input_tensor = tf.reshape(char_input_tensor, shape=[s[0]*s[1], s[2], self.config["char_embedding_size"]])
                 _word_lengths = tf.reshape(self.word_lengths, shape=[s[0]*s[1]])
-                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 10)
                 print('char_input_tensor: {}'.format(char_input_tensor))
+                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 5)
 
                 char_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["char_recurrent_size"],
                     use_peepholes=self.config["lstm_use_peepholes"],
@@ -195,17 +198,18 @@ class SequenceLabeler(object):
 
                 # Seems like only char_output_fw and char_output_bw are important
                 _, ((_, char_output_fw), (_, char_output_bw)) = char_lstm_outputs
+                print('char_lstm_outputs: {}'.format(char_lstm_outputs))
+                char_lstm_outputs = tf.Print(char_lstm_outputs, [tf.shape(char_lstm_outputs), char_lstm_outputs], 'char_lstm_outputs: ', summarize = 5)
+
                 char_output_tensor = tf.concat([char_output_fw, char_output_bw], axis=-1)
-                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
+                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ', summarize = 5)
 
                 char_output_tensor = tf.reshape(char_output_tensor, shape=[s[0], s[1], 2 * self.config["char_recurrent_size"]])
-                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
+                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ', summarize = 5)
 
                 char_output_vector_size = 2 * self.config["char_recurrent_size"]
-                char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
-                print('char_ouput_tensor: {}'.format(char_output_tensor))
 
                 if self.config["lmcost_char_gamma"] > 0.0:
                     self.loss += self.config["lmcost_char_gamma"] * self.construct_lmcost(char_output_tensor, char_output_tensor, self.sentence_lengths, self.word_ids, "separate", "lmcost_char_separate")
@@ -222,8 +226,8 @@ class SequenceLabeler(object):
                     # input = char_output_tensor
                     # output dim = char_hidden_layer_size
                     char_output_tensor = tf.layers.dense(char_output_tensor, char_hidden_layer_size, activation=tf.tanh, kernel_initializer=self.initializer)
-                    char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ')
                     print('char_ouput_tensor: {}'.format(char_output_tensor))
+                    char_output_tensor = tf.Print(char_output_tensor, [tf.shape(char_output_tensor), char_output_tensor], 'char_output_tensor: ', summarize = 5)
 
                     char_output_vector_size = char_hidden_layer_size
 
@@ -231,8 +235,8 @@ class SequenceLabeler(object):
 
                     # combines character and word embeddings by concatenation
                     input_tensor = tf.concat([input_tensor, char_output_tensor], axis=-1)
-                    input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ')
                     print('input_tensor: {}'.format(input_tensor))
+                    input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], '--Concat word and char tensors--\ninput_tensor: ', summarize = 5)
 
                     input_vector_size += char_output_vector_size
 
@@ -256,10 +260,15 @@ class SequenceLabeler(object):
                 else:
                     raise ValueError("Unknown char integration method")
 
+        # Controls dropout probability
+        # dropout_input = 0.5
         dropout_input = self.config["dropout_input"] * tf.cast(self.is_training, tf.float32) + (1.0 - tf.cast(self.is_training, tf.float32))
+        print('dropout_input: {}'.format(dropout_input))
+        dropout_input = tf.Print(dropout_input, [tf.shape(dropout_input), dropout_input], 'dropout_input: ', summarize = 5)
+
         input_tensor =  tf.nn.dropout(input_tensor, dropout_input, name="dropout_word")
-        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ')
         print('input_tensor: {}'.format(input_tensor))
+        input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], '--Apply dropout--\ninput_tensor: ', summarize = 5)
 
         word_lstm_cell_fw = tf.nn.rnn_cell.LSTMCell(self.config["word_recurrent_size"],
             use_peepholes=self.config["lstm_use_peepholes"],
@@ -275,36 +284,91 @@ class SequenceLabeler(object):
         with tf.control_dependencies([tf.assert_equal(tf.shape(self.word_ids)[1], tf.reduce_max(self.sentence_lengths), message="Sentence dimensions don't match")]):
             (lstm_outputs_fw, lstm_outputs_bw), _ = tf.nn.bidirectional_dynamic_rnn(word_lstm_cell_fw, word_lstm_cell_bw, input_tensor, sequence_length=self.sentence_lengths, dtype=tf.float32, time_major=False)
 
-        dropout_word_lstm = self.config["dropout_word_lstm"] * tf.cast(self.is_training, tf.float32) + (1.0 - tf.cast(self.is_training, tf.float32))
-        lstm_outputs_fw =  tf.nn.dropout(lstm_outputs_fw, dropout_word_lstm)
-        lstm_outputs_bw =  tf.nn.dropout(lstm_outputs_bw, dropout_word_lstm)
+        # Print output of bidirectional lstm
+        print('lstm_outputs_fw: {}'.format(lstm_outputs_fw))
+        lstm_outputs_fw = tf.Print(lstm_outputs_fw, [tf.shape(lstm_outputs_fw), lstm_outputs_fw], 'lstm_outputs_fw: ', summarize = 5)
+        print('lstm_outputs_bw: {}'.format(lstm_outputs_bw))
+        lstm_outputs_bw = tf.Print(lstm_outputs_bw, [tf.shape(lstm_outputs_bw), lstm_outputs_bw], 'lstm_outputs_bw: ', summarize = 5)
+        print('_: {}'.format(_))
+        _ = tf.Print(_, [tf.shape(_), _], '_: ', summarize = 5)
 
+
+        # Controls dropout probability
+        # dropout_word_lstm = 0.5
+        dropout_word_lstm = self.config["dropout_word_lstm"] * tf.cast(self.is_training, tf.float32) + (1.0 - tf.cast(self.is_training, tf.float32))
+        print('dropout_word_lstm: {}'.format(dropout_word_lstm))
+        dropout_word_lstm = tf.Print(dropout_word_lstm, [tf.shape(dropout_word_lstm), dropout_word_lstm], 'dropout_word_lstm: ', summarize = 5)
+
+        lstm_outputs_fw =  tf.nn.dropout(lstm_outputs_fw, dropout_word_lstm)
+        print('lstm_outputs_fw: {}'.format(lstm_outputs_fw))
+        lstm_outputs_fw = tf.Print(lstm_outputs_fw, [tf.shape(lstm_outputs_fw), lstm_outputs_fw], '--Apply dropout--\nlstm_outputs_fw: ', summarize = 5)
+
+        lstm_outputs_bw =  tf.nn.dropout(lstm_outputs_bw, dropout_word_lstm)
+        print('lstm_outputs_bw: {}'.format(lstm_outputs_bw))
+        lstm_outputs_bw = tf.Print(lstm_outputs_bw, [tf.shape(lstm_outputs_bw), lstm_outputs_bw], 'lstm_outputs_bw: ', summarize = 5)
+
+        # Default = 0.1
         if self.config["lmcost_lstm_gamma"] > 0.0:
             self.loss += self.config["lmcost_lstm_gamma"] * self.construct_lmcost(lstm_outputs_fw, lstm_outputs_bw, self.sentence_lengths, self.word_ids, "separate", "lmcost_lstm_separate")
+            print('self.loss: {}'.format(self.loss))
+            self.loss = tf.Print(self.loss, [tf.shape(self.loss), self.loss], 'self.loss: ', summarize = 5)
+
+        # Default = 0.0
         if self.config["lmcost_joint_lstm_gamma"] > 0.0:
             self.loss += self.config["lmcost_joint_lstm_gamma"] * self.construct_lmcost(lstm_outputs_fw, lstm_outputs_bw, self.sentence_lengths, self.word_ids, "joint", "lmcost_lstm_joint")
+            print('self.loss: {}'.format(self.loss))
+            self.loss = tf.Print(self.loss, [tf.shape(self.loss), self.loss], 'self.loss: ', summarize = 5)
 
+        # This is the concatenated representation of the two hidden layers produced by the bidirectional LSTM (notation = h_i in the literature)
         processed_tensor = tf.concat([lstm_outputs_fw, lstm_outputs_bw], 2)
+        print('processed_tensor: {}'.format(processed_tensor))
+        processed_tensor = tf.Print(processed_tensor, [tf.shape(processed_tensor), processed_tensor], '--Concat fw and bw LSTMs--\nprocessed_tensor: ', summarize = 5)
+
         processed_tensor_size = self.config["word_recurrent_size"] * 2
 
+        # Default = 50
+        # This is the activation layer above the concatenated LSTM outputs (notation = e_i in the literature)
         if self.config["hidden_layer_size"] > 0:
+
             processed_tensor = tf.layers.dense(processed_tensor, self.config["hidden_layer_size"], activation=tf.tanh, kernel_initializer=self.initializer)
+            print('processed_tensor: {}'.format(processed_tensor))
+            processed_tensor = tf.Print(processed_tensor, [tf.shape(processed_tensor), processed_tensor], '--Activation layer (h -> e)--\nprocessed_tensor: ', summarize = 5)
+
             processed_tensor_size = self.config["hidden_layer_size"]
 
+        # This is an output layer predicting the binary labels for each word. [[? ?], [? ?], ...]
+        # However, it has not been normalized (softmax) into a probability measure.
+        # [Shouldn't this be the attention layer containing a scalar instead of a length-2 list?]
         self.scores = tf.layers.dense(processed_tensor, len(self.label2id), activation=None, kernel_initializer=self.initializer, name="output_ff")
+        print('self.scores: {}'.format(self.scores))
+        self.scores = tf.Print(self.scores, [tf.shape(self.scores), self.scores], 'self.scores: ', summarize = 5)
 
+        # Default crf_on_top = False
         if self.config["crf_on_top"] == True:
             crf_num_tags = self.scores.get_shape()[2].value
             self.crf_transition_params = tf.get_variable("output_crf_transitions", [crf_num_tags, crf_num_tags], initializer=self.initializer)
             log_likelihood, self.crf_transition_params = tf.contrib.crf.crf_log_likelihood(self.scores, self.label_ids, self.sentence_lengths, transition_params=self.crf_transition_params)
             self.loss += self.config["main_cost"] * tf.reduce_sum(-log_likelihood)
         else:
+
             self.probabilities = tf.nn.softmax(self.scores)
+            print('self.probabilities: {}'.format(self.probabilities))
+            self.probabilities = tf.Print(self.probabilities, [tf.shape(self.probabilities), self.probabilities], '--Softmax--\nself.probabilities: ', summarize = 5)
+
             self.predictions = tf.argmax(self.probabilities, 2)
+            print('self.predictions: {}'.format(self.predictions))
+            self.predictions = tf.Print(self.predictions, [tf.shape(self.predictions), self.predictions], 'self.predictions: ', summarize = 5)
+
             loss_ = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=self.scores, labels=self.label_ids)
+            print('loss_: {}'.format(loss_))
+            loss_ = tf.Print(loss_, [tf.shape(loss_), loss_], 'loss_: ', summarize = 5)
+
             mask = tf.sequence_mask(self.sentence_lengths, maxlen=tf.shape(self.word_ids)[1])
             loss_ = tf.boolean_mask(loss_, mask)
+
             self.loss += self.config["main_cost"] * tf.reduce_sum(loss_)
+            print('self.loss: {}'.format(self.loss))
+            self.loss = tf.Print(self.loss, [tf.shape(self.loss), self.loss], 'self.loss: ', summarize = 5)
 
         self.train_op = self.construct_optimizer(self.config["opt_strategy"], self.loss, self.learningrate, self.config["clip"])
 
