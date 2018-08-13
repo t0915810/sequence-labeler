@@ -166,6 +166,7 @@ def process_sentences(data, labeler, is_training, learningrate, config, name):
         while config["garbage_collection"] == True and gc.collect() > 0:
             pass
 
+    # name = 'train'
     results = evaluator.get_results(name)
     for key in results:
         print(key + ": " + str(results[key]))

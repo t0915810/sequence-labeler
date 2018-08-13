@@ -10,8 +10,8 @@ class SequenceLabelingEvaluator(object):
         self.conll_eval = conll_eval
         self.main_label_id = self.label2id[self.main_label]
 
-        self.cost_sum = 0.0
-        self.correct_sum = 0.0
+        self.cost_sum = 0.0  # total cost across all batches
+        self.correct_sum = 0.0  # number of correctly predicted labels
         self.main_predicted_count = 0
         self.main_total_count = 0
         self.main_correct_count = 0
@@ -79,6 +79,3 @@ class SequenceLabelingEvaluator(object):
 #                results[name + "_conll_f_" + str(i)] = m.fscore #str(m.fscore) + " " + str(conll_counts.t_found_guessed[i])
 
         return results
-
-
-
