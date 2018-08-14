@@ -372,7 +372,6 @@ class SequenceLabeler(object):
 
         self.train_op = self.construct_optimizer(self.config["opt_strategy"], self.loss, self.learningrate, self.config["clip"])
 
-
     def construct_lmcost(self, input_tensor_fw, input_tensor_bw, sentence_lengths, target_ids, lmcost_type, name):
         with tf.variable_scope(name):
             lmcost_max_vocab_size = min(len(self.word2id), self.config["lmcost_max_vocab_size"])
@@ -529,9 +528,9 @@ class SequenceLabeler(object):
             predicted_labels = []
             predicted_probs = []
             for i in range(len(batch)):
-                sentence_length = len(batch[i])
-                predicted_labels.append(predicted_labels_[i][:sentence_length])
-                predicted_probs.append(predicted_probs_[i][:sentence_length])
+                sentence_length = len(batch[i]) # 35
+                predicted_labels.append(predicted_labels_[i][:sentence_length]) #[1, 0, 0, ..]
+                predicted_probs.append(predicted_probs_[i][:sentence_length]) #[0, 0, 0, ..]
 
         return cost, predicted_labels, predicted_probs
 

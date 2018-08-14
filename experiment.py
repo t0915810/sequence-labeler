@@ -162,6 +162,7 @@ def process_sentences(data, labeler, is_training, learningrate, config, name):
 
         evaluator.append_data(cost, batch, predicted_labels)
 
+        # ?? Unused
         word_ids, char_ids, char_mask, label_ids = None, None, None, None
         while config["garbage_collection"] == True and gc.collect() > 0:
             pass
