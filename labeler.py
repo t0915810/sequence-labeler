@@ -151,6 +151,8 @@ class SequenceLabeler(object):
         input_tensor = tf.nn.embedding_lookup(self.word_embeddings, self.word_ids)
         print('input_tensor: {}'.format(input_tensor))
         input_tensor = tf.Print(input_tensor, [tf.shape(input_tensor), input_tensor], 'input_tensor: ', summarize = 5)
+        input_tensor = tf.Print(input_tensor, [tf.shape(self.word_embeddings), self.word_embeddings], 'self.word_embeddings: ', summarize = 5)
+        input_tensor = tf.Print(input_tensor, [tf.shape(self.word_ids), self.word_ids], 'self.word_ids: ', summarize = 5)
 
         # 'word_embedding_size' = 300
         input_vector_size = self.config["word_embedding_size"]
@@ -173,9 +175,11 @@ class SequenceLabeler(object):
                 char_input_tensor = tf.nn.embedding_lookup(self.char_embeddings, self.char_ids)
                 print('char_input_tensor: {}'.format(char_input_tensor))
                 char_input_tensor = tf.Print(char_input_tensor, [tf.shape(char_input_tensor), char_input_tensor], 'char_input_tensor: ', summarize = 5)
+                char_input_tensor = tf.Print(char_input_tensor, [tf.shape(self.char_embeddings), self.char_embeddings], 'self.char_embeddings: ', summarize = 5)
 
                 # Reshape char_input_tensor from 4D [batch size, max # words, max # chars, # unique chars]
                 # into 3D [batch size * max # words, max # chars, # unique chars]
+                # Reason: lstm only accepts 3d vector of [?, ?, ?] = [all words in a batch, up to 14 chars, char embedding = 100]
                 # Values are not affected.
                 s = tf.shape(char_input_tensor)
                 char_input_tensor = tf.reshape(char_input_tensor, shape=[s[0]*s[1], s[2], self.config["char_embedding_size"]])
@@ -196,10 +200,13 @@ class SequenceLabeler(object):
 
                 char_lstm_outputs = tf.nn.bidirectional_dynamic_rnn(char_lstm_cell_fw, char_lstm_cell_bw, char_input_tensor, sequence_length=_word_lengths, dtype=tf.float32, time_major=False)
 
+                (lstm_outputs_fw, lstm_outputs_bw), _ = tf.nn.bidirectional_dynamic_rnn(word_lstm_cell_fw, word_lstm_cell_bw, input_tensor, sequence_length=self.sentence_lengths, dtype=tf.float32, time_major=False)
+
                 # Seems like only char_output_fw and char_output_bw are important
                 _, ((_, char_output_fw), (_, char_output_bw)) = char_lstm_outputs
                 print('char_lstm_outputs: {}'.format(char_lstm_outputs))
-                char_lstm_outputs = tf.Print(char_lstm_outputs, [tf.shape(char_lstm_outputs), char_lstm_outputs], 'char_lstm_outputs: ', summarize = 5)
+                char_output_fw = tf.Print(char_output_fw, [tf.shape(char_output_fw), char_output_fw], 'char_output_fw: ', summarize = 5)
+                char_output_bw = tf.Print(char_output_bw, [tf.shape(char_output_bw), char_output_bw], 'char_output_bw: ', summarize = 5)
 
                 char_output_tensor = tf.concat([char_output_fw, char_output_bw], axis=-1)
                 print('char_ouput_tensor: {}'.format(char_output_tensor))
@@ -370,7 +377,11 @@ class SequenceLabeler(object):
             print('self.loss: {}'.format(self.loss))
             self.loss = tf.Print(self.loss, [tf.shape(self.loss), self.loss], 'self.loss: ', summarize = 5)
 
+        # 'opt_strategy' = adadelta
+        # 'clip' = 0.0
         self.train_op = self.construct_optimizer(self.config["opt_strategy"], self.loss, self.learningrate, self.config["clip"])
+        print('self.loss: {}'.format(self.loss))
+        self.loss = tf.Print(self.loss, [tf.shape(self.loss), self.loss], 'self.loss: ', summarize = 5)
 
     def construct_lmcost(self, input_tensor_fw, input_tensor_bw, sentence_lengths, target_ids, lmcost_type, name):
         with tf.variable_scope(name):
